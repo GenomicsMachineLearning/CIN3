@@ -1,0 +1,90 @@
+```{r}
+metadata <- integrated_data@meta.data
+
+
+metadata <- metadata %>%
+  mutate(Module_Score_Diff = Macro1_MS - Macro2_MS)
+
+# Add the calculated difference back to the Seurat object's metadata
+integrated_data@meta.data <- metadata
+
+
+###################################################
+
+# Specify the clusters of interest
+clusters_of_interest <- c(8,9,10)  # Replace with other clusters of interest
+
+# Subset the Seurat object to include only the clusters of interest
+subset_int_data <- subset(integrated_data, idents = clusters_of_interest)
+
+# Convert metadata to a data frame for plotting
+plot_data <- subset_int_data@meta.data %>%
+  dplyr::select(Module_Score_Diff, seurat_clusters) %>%
+  dplyr::rename(Cluster = seurat_clusters)
+
+ggplot(plot_data, aes(x = as.factor(Cluster), y = Module_Score_Diff, fill = as.factor(Cluster))) +
+  geom_boxplot() +
+  labs(title = "Module_Score_Diff by Cluster", x = "Cluster", y = "Enrichment Score") +
+  theme_minimal() +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(n = length(unique(plot_data$Cluster)), name = "Set1")) +
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+```
+
+```{r}
+metadata <- integrated_data@meta.data
+
+
+metadata <- metadata %>%
+  mutate(Module_Score_Diff = Macro2_MS - Macro1_MS)
+
+# Add the calculated difference back to the Seurat object's metadata
+integrated_data@meta.data <- metadata
+
+
+###################################################
+
+# Specify the clusters of interest
+clusters_of_interest <- c(8,9,10)  # Replace with your clusters of interest
+
+# Subset the Seurat object to include only the clusters of interest
+subset_int_data <- subset(integrated_data, idents = clusters_of_interest)
+
+# Convert metadata to a data frame for plotting
+plot_data <- subset_int_data@meta.data %>%
+  dplyr::select(Module_Score_Diff, seurat_clusters) %>%
+  dplyr::rename(Cluster = seurat_clusters)
+
+ggplot(plot_data,aes(x = as.factor(Cluster), y = Module_Score_Diff, fill = as.factor(Cluster))) +
+  geom_boxplot() + scale_fill_manual(values = c(`8`="#00A6FF", `9`= "#B385FF", `10`= "#EF67EB")) +
+  labs(title = "Module_Score_Diff by Cluster", x = "Cluster", y = "Enrichment Score")
+```
+
+```{r cell ratios}
+# Calculate cell ratios for each sample
+for (i in 1:length(sub10_sample_list)) {
+  visium_data <- sub10_sample_list[[i]]
+  cluster_idents <- Idents(visium_data)
+  cluster_df <- as.data.frame(table(cluster_idents))
+  colnames(cluster_df) <- c("Cluster", "Count")
+  
+  # Calculate the ratio of each cluster
+  total_cells <- sum(cluster_df$Count)
+  cluster_df <- cluster_df %>%
+    mutate(Ratio = Count / total_cells,
+           Sample = paste("Sample", i, sep = ""))
+  
+  cluster_ratios_list[[i]] <- cluster_df
+}
+
+
+# Combine data from all samples into a single data frame
+combined_cluster_ratios <- bind_rows(cluster_ratios_list)
+
+# Create the stacked bar plot
+ggplot(combined_cluster_ratios, aes(x = Sample, y = Ratio, fill = Cluster)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Cell Type Ratios Across Samples", x = "Sample", y = "Ratio") +
+  scale_y_continuous(labels = scales::percent) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```

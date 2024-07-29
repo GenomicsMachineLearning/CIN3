@@ -1,0 +1,34 @@
+```{r}
+
+#cell_cycle.outputdir <- paste0(outputdir, “/Cell_Cycle”)
+#dir.create(cell_cycle.outputdir)
+#func_predictCellCycle <- function(seuratObj, myspecies=“human”, outdir,sampleID){
+  # USAGE: seuratObj <- func_predictCellCycle(seuratObj, “mouse”)
+  # OUTPUT: a Seurat object with S/G2M-phase scores and cell stage (G1, S, G2M) calls
+  # specify the gene set used for Cell Cycle Scoring (human or mouse)
+#  if (identical(myspecies, “mouse”)) {
+#    load(“/Users/uqlgrice/Documents/IMB/Research/LabBooks/20200106_BuildPipe/data/mouse.cc.genes.Rdata”)
+#    geneset <- mouse.cc.genes
+#  } else if (identical(myspecies, “human”)) {
+geneset <- cc.genes.updated.2019
+#  } else {
+#    stop(“The ‘species’ argument must be mouse or human”)
+#  }
+  # make a Seurat object, normalise, run prediction
+  # note: we use Seurat’s default normalisation tool for the cell phase assessment (quick and dirty). Later we will use Scran for the normal normalisation
+
+for (i in 1:7){
+test_cycle <- CellCycleScoring(data_ident_rename[[i]], s.features = geneset$s.genes, g2m.features = geneset$g2m.genes, set.ident = TRUE)
+
+SpatialDimPlot(test_cycle, group.by = "Phase")}
+```
+
+```{r}
+# Fixed code with replacement allowed
+test_cycle <- CellCycleScoring(data_ident_rename[[1]], s.features = geneset$s.genes, g2m.features = geneset$g2m.genes, set.ident = TRUE)
+
+SpatialDimPlot(test_cycle, group.by = "Phase")
+
+df <- as.data.frame(unique(integrated_data@meta.data$Phase))
+
+```

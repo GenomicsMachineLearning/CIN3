@@ -1,0 +1,117 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r import_data}
+
+DATA_DIR <- "~/Documents/Visium_S01_MAR21/"
+opscc <- Load10X_Spatial("~/Documents/Visium_S01_MAR21", filename = "filtered_feature_bc_matrix.h5", assay = "Spatial", slice = "S01Array")
+opscc@assays$Spatial$data <- opscc@assays$Spatial$counts
+  
+```
+
+```{r}
+new_clusters <- read.csv("~/Documents/Visium_S01_MAR21/spatial/pathologist_annotations_MAR21.csv")
+
+barcodes <- new_clusters$Barcode
+clusters <- new_clusters$pathologist_annotation
+
+# Ensure the barcodes match those in the Seurat object
+if(!all(barcodes %in% colnames(opscc))) {
+  stop("Some barcodes in the CSV do not match those in the Seurat object.")
+}
+
+# Create a named vector for the new identities
+new_idents <- setNames(clusters, barcodes)
+
+# Add new identities to the Seurat object
+opscc <- AddMetaData(opscc, metadata = new_idents, col.name = "new_clusters")
+Idents(opscc) <- opscc$new_clusters
+
+# Verify the changes
+table(Idents(opscc))
+
+```
+```{r}
+get_module_score_clusters <- function (data){
+    matches = list()
+    for(group in groups){
+        cluster_list <-  c()
+        for (idx in 1:nrow(data@meta.data)){
+            if (data@meta.data[[group]][idx] > 0.1){ 
+                other_cols <- setdiff(groups, group)
+                bool <- apply(data@meta.data[idx,][other_cols], 1, function(row) all(row < 0)) #if both greater than 0.1 
+                if (bool == TRUE){
+                
+                    cluster_list <-  c(cluster_list, group)
+                } else{
+                    cluster_list <-  c(cluster_list, FALSE)
+                }
+                          
+            } else {
+                cluster_list <-  c(cluster_list, FALSE)
+            }
+        }
+        matches[[group]] <- cluster_list                      
+    }
+    my_df <- data.frame(do.call(cbind, matches))
+    
+    finalised_column <- c()
+    for (idx in 1:nrow(my_df)){
+        result <- my_df[idx,][my_df[idx,] != "FALSE"]
+        if (length(result) >0){
+            finalised_column <- c(finalised_column, result)
+        } else{
+            finalised_column <- c(finalised_column,"None")
+        }
+    }
+
+    data@meta.data$summarised <- finalised_column                       
+    
+    new_col <- c()
+    for (row in data@meta.data$summarised){
+        if (row  != "None"){
+            int <- as.numeric(strsplit(row,split = "Cluster")[[1]][2])
+
+            val <- group_names[int]
+
+        } else{
+            val <- "None"
+            }
+        new_col <- c(new_col, val)
+        }
+                       
+    data@meta.data$finalised <- new_col
+                              
+    return(data)
+}
+```
+
+
+```{r tumour vs IL34*CSF1R}
+add_mod_score <- function(data, module_score_gene_list, assay, slot){
+    data <- AddModuleScore(data,features = module_score_gene_list, assay = assay, slot = slot, nbin = 12)
+    return(data)
+}
+
+#Gene lists
+opscc_cancer_markers <- c("SOX4", "SLC2A1", "KRT8", "EIF4A2", "SNAI2", "CA12", "HSPH1", "ANGPTL4", "FAM162A", "PFKP", "TGFB1", "UHRF2", "PSIP1", "MYC", "RCL1", "KDM4C", "ACTL6A", "CHAF1A", "DEK", "ECT2", "POLR1D", "GAS1", "PLOD2", "DDIT4", "IL33", "ABCC5", "ALCAM", "CALCRL", "MKNK2", "MT2A")
+
+gene_lists <- list("Tumour" = opscc_cancer_markers,
+                  "IL34_CSF1R" = c("IL34","CSF1R"))
+
+opscc <- add_mod_score(opscc, gene_lists, "Spatial", "data" )
+
+opscc@meta.data$Tumour <- opscc@meta.data$Cluster1
+opscc@meta.data$IL34_CSF1R <- opscc@meta.data$Cluster2
+
+groups = c("Cluster1","Cluster2")
+group_names = c("Tumour","IL34_CSF1R")
+
+opscc <- get_module_score_clusters(opscc)
+
+SpatialDimPlot(opscc, group.by = "finalised",cols = c("IL34_CSF1R" = "blue","Tumour" = "red","None" = "lightgrey"))
+
+
+```

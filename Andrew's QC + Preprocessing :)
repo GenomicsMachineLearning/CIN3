@@ -1,0 +1,359 @@
+
+```{r inport_data}
+#our data
+# mine is VLP86_A
+DATA_DIR <- "/Volumes/GML001-Q1851/Andrew_C/CIN/CIN_data"
+
+
+VLP85_A <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP85_A/outs/"))
+VLP85_D <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP85_D/outs/"))
+VLP86_A <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP86_A/outs/"))
+VLP86_D <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP86_D/outs/"))
+VLP89_A <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP89_A/outs/"))
+VLP89_D <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP89_D/outs/"))
+VLP90_A <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP90_A/outs/"))
+VLP90_D <- Load10X_Spatial(data.dir = paste0(DATA_DIR,"/VLP90_D/outs/"))
+  
+```
+
+```{r image_int_vals}
+#Some of the images are inporting with non-int values, this code fixes that
+
+image_to_int <- function(seurat_obj){
+  seurat_obj@images[["slice1"]]@coordinates[["tissue"]] <- as.integer(seurat_obj@images[["slice1"]]@coordinates[["tissue"]])
+  seurat_obj@images[["slice1"]]@coordinates[["row"]] <- as.integer(seurat_obj@images[["slice1"]]@coordinates[["row"]])
+  seurat_obj@images[["slice1"]]@coordinates[["col"]] <- as.integer(seurat_obj@images[["slice1"]]@coordinates[["col"]])
+  seurat_obj@images[["slice1"]]@coordinates[["imagerow"]] <- as.integer(seurat_obj@images[["slice1"]]@coordinates[["imagerow"]])
+  seurat_obj@images[["slice1"]]@coordinates[["imagecol"]] <- as.integer(seurat_obj@images[["slice1"]]@coordinates[["imagecol"]])
+  
+  return(seurat_obj)
+  
+}
+```
+
+
+```{r}
+VLP85_A <- image_to_int(VLP85_A)
+VLP85_D <- image_to_int(VLP85_D)
+VLP86_A <- image_to_int(VLP86_A)
+VLP86_D <- image_to_int(VLP86_D)
+VLP89_A <- image_to_int(VLP89_A)
+VLP89_D <- image_to_int(VLP89_D)
+VLP90_A <- image_to_int(VLP90_A)
+VLP90_D <- image_to_int(VLP90_D)
+
+# original: generate a list of objects 
+data_list <- list("VLP85_A" = VLP85_A,
+                  "VLP85_D" = VLP85_D,
+                  "VLP86_A" = VLP86_A,
+                  "VLP86_D" = VLP86_D,
+                  "VLP89_A" = VLP89_A,
+                  "VLP89_D" = VLP89_D,
+                  "VLP90_A" = VLP90_A,
+                  "VLP90_D" = VLP90_D)
+data_list_names <- c("VLP85_A","VLP85_D","VLP86_A","VLP86_D","VLP89_A","VLP89_D","VLP90_A","VLP90_D")
+```
+
+
+```{r}
+for (sample in names(data_list)){
+  data_list[[sample]]@meta.data$sample <- sample
+}
+
+for (sample in names(data_list)) {
+    data_list[[sample]]@assays$Spatial$data <- data_list[[sample]]@assays$Spatial$counts
+}
+merge <- merge(data_list[[1]], y = data_list[2:length(data_list)], add.cell.ids = names(data_list))
+
+```
+```{r summary violin plots}
+VlnPlot(merge, c("nCount_Spatial", "nFeature_Spatial"), group.by = 'sample')
+```
+
+
+```{r}
+
+qc_plots <- function(seurat_obj){
+  plot1 <- SpatialFeaturePlot(seurat_obj, features = "nCount_Spatial")
+  plot2 <- SpatialFeaturePlot(seurat_obj, features = "nFeature_Spatial") + theme(legend.position = "right")
+  plot1+plot2
+}
+
+for (sample in data_list){
+  print(qc_plots(sample))
+}
+
+for (sample in names(data_list)){
+  data_list[[sample]]
+}
+```
+
+```{r}
+
+qc_plots <- function(seurat_obj){
+    plot1 <- SpatialFeaturePlot(seurat_obj, features = "nCount_Spatial")
+    plot2 <- SpatialFeaturePlot(seurat_obj, features = "nFeature_Spatial")
+    plot3 <- VlnPlot(seurat_obj, features = "nCount_Spatial") + stat_summary(fun=mean, geom="point", shape=23, size=2, color = "blue")
+    plot4 <- VlnPlot(seurat_obj, features = "nFeature_Spatial") + stat_summary(fun=mean, geom="point", shape=23, size=2, color = "blue")
+    plot2 + plot4
+}
+
+for (sample in data_list){
+  print(qc_plots(sample))
+}
+
+```{r run_qc}
+run_qc <- function(data, min_genes, min_spots, assay="RNA") {
+    
+    dim(data@meta.data)
+    head(data@meta.data)
+    
+    # QC - removing Mitochondrial and Ribosomal Genes
+    print("QC - removing Mitochondrial and Ribosomal Genes...")
+    data <- PercentageFeatureSet(data, "^MT-", col.name = "percent_mito", assay=assay)
+    data <- PercentageFeatureSet(data, "^RP[SL]", col.name = "percent_ribo", assay=assay)
+
+    ## check the feature and count distribution before qc
+    feats <- c("nFeature_Spatial", "nCount_Spatial")
+        
+    # filtering 
+    selected_c <- WhichCells(data, expression = nFeature_Spatial > min_genes)
+    length(selected_c)
+    
+    selected_f <- rownames(data)[Matrix::rowSums(data) > min_spots]
+    length(selected_f)
+    
+    data <- subset(data, features = selected_f, cells = selected_c)
+    
+    selected_c2=rownames(data@meta.data)[data$orig.ident!='']
+    data <- subset(data,  cells = selected_c2)
+    print("Keeping the filtered spots in Seurat object...")
+    
+    return(data)
+}
+
+
+```
+
+```{r run_qc_data}
+data_list_qc <-c()
+for (sample in data_list){
+  d <- run_qc(sample, min_genes = 10, min_spots = 3, assay = "Spatial")
+  data_list_qc <- c(data_list_qc, d)
+}
+```
+```{r generate_clusters}
+data_list_umaps <- c()
+#normalises data
+for (sample in data_list_qc){
+  d <- SCTransform(sample, assay = "Spatial", verbose = FALSE)
+  d <- RunPCA(d, assay = "SCT", verbose = FALSE)
+  d <- FindNeighbors(d, reduction = "pca", dims = 1:30)
+  d <- FindClusters(d, resolution = 0.5,verbose = FALSE)
+  d <- RunUMAP(d, reduction = "pca", dims = 1:30)
+  data_list_umaps <- c(data_list_umaps, d)
+}
+```
+
+```{r plot_clusters}
+for (sample in data_list_umaps[]){
+  print(sample)
+}
+```
+
+```{r}
+
+outdir <- "~/Downloads/QRISdata/Q1851/Andrew_C/CIN/outs/"
+dir.create(outdir)
+
+
+idx <- 1
+top_10 <-c()
+
+while(idx <= length(data_list_umaps[])){
+  sample <- data_list_umaps[[idx]]
+  markers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+  markers <- markers %>% dplyr::filter(p_val_adj <= 0.05)
+  markers <- markers %>% group_by(cluster) %>% arrange(-avg_log2FC) %>% dplyr::slice(1:50)
+  top10_norm <- markers %>% group_by(cluster) %>% arrange(-avg_log2FC) %>% dplyr::slice(1:10)
+  top_10 <- c(top_10, list(top10_norm))
+  write.table(markers, file = paste0(outdir, data_list_names[idx], "_allmarkers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  idx <- idx + 1
+}
+```
+
+```{r rename_ids}
+VLP85_A_clusters <- c(
+  "0" = "Endothelial Cells",
+  "1" = "Myofibroblasts",
+  "2" = "Fibroblasts",
+  "3" = "Smooth Muscle Cells",
+  "4" = "Secretory Epithelial Cells",
+  "5" = "Epithelial Cells",
+  "6" = "Secretory Epithelial Cells",
+  "7" = "Epithelial Cells",
+  "8" = "Keratinocytes"
+)
+
+VLP85_D_clusters <- c(
+  "0" = "Smooth Muscle Cells",
+  "1" = "Smooth Muscle Cells",
+  "2" = "Smooth Muscle Cells",
+  "3" = "Endothelial Cells",
+  "4" = "Epithelial Cells",
+  "5" = "Endothelial Cells",
+  "6" = "B Cells",
+  "7" = "Fibroblasts",
+  "8" = "Fibroblasts",
+  "9" = "Secretory Epithelial Cells",
+  "10" = "Keratinocytes"
+)
+
+VLP86_A_clusters <- c(
+  "0" = "Endothelial Cells",
+  "1" = "Smooth Muscle Cells",
+  "2" = "Secretory Epithelial Cells",
+  "3" = "Secretory Epithelial Cells",
+  "4" = "Keratinocytes",
+  "5" = "Endothelial Cells",
+  "6" = "Smooth Muscle Cells",
+  "7" = "Schwann Cells",
+  "8" = "Plasma Cells",
+  "9" = "Macrophages",
+  "10" = "Endothelial Cells",
+  "11" = "Secretory Epithelial Cells",
+  "12" = "Schwann Cells"
+)
+
+VLP86_D_clusters <- c(
+  "0" = "Smooth Muscle Cells",
+  "1" = "Secretory Epithelial Cells",
+  "2" = "B Cells",
+  "3" = "Fibroblasts",
+  "4" = "Myofibroblasts",
+  "5" = "Secretory Epithelial Cells",
+  "6" = "Smooth Muscle Cells",
+  "7" = "Secretory Epithelial Cells",
+  "8" = "Keratinocytes"
+)
+
+VLP89_A_clusters <- c(
+  "0" = "Myofibroblasts",
+  "1" = "Endothelial Cells",
+  "2" = "Fibroblasts",
+  "3" = "B Cells",
+  "4" = "Secretory Epithelial Cells",
+  "5" = "Secretory Epithelial Cells",
+  "6" = "Smooth Muscle Cells",
+  "7" = "Keratinocytes",
+  "8" = "Smooth Muscle Cells",
+  "9" = "Monocytes",
+  "10" = "Unknown Cell Type",
+  "11" = "Myofibroblasts"
+)
+
+VLP89_D_clusters <- c(
+  "0" = "Myofibroblasts",
+  "1" = "B Cells",
+  "2" = "Secretory Epithelial Cells",
+  "3" = "Macrophages",
+  "4" = "Uknown Cell Type",
+  "5" = "Smooth Muscle Cells",
+  "6" = "Keratinocytes",
+  "7" = "Epithelial Cells",
+  "8" = "Secretory Epithelial Cells",
+  "9" = "Smooth Muscle Cells"
+)
+
+VLP90_A_clusters <- c(
+  "0" = "Smooth Muscle Cells",
+  "1" = "Secretory Epithelial Cells",
+  "2" = "Smooth Muscle Cells",
+  "3" = "Fibroblasts",
+  "4" = "Secretory Epithelial Cells",
+  "5" = "Keratinocytes",
+  "6" = "Endothelial Cells",
+  "7" = "Smooth Muscle Cells",
+  "8" = "Secretory Epithelial Cells",
+  "9" = "Fibroblasts",
+  "10" = "B Cells",
+  "11" = "Keratinocytes"
+)
+
+VLP90_D_clusters <- c(
+  "0" = "Smooth Muscle Cells",
+  "1" = "Secretory Epithelial Cells",
+  "2" = "Unknown Cell Type",
+  "3" = "Fibroblasts",
+  "4" = "Smooth Muscle Cells"
+)
+
+cell_annot_list <-list(VLP85_A_clusters, VLP85_D_clusters,VLP86_A_clusters,VLP86_D_clusters, VLP89_A_clusters, VLP89_D_clusters, VLP90_A_clusters, VLP90_D_clusters)
+
+
+idx <- 1 
+data_ident_rename <- c()
+while (idx <= length(data_list_umaps[])){
+  sample_x <- RenameIdents(data_list_umaps[[idx]], cell_annot_list[[idx]])
+  data_ident_rename <- c(data_ident_rename, sample_x)
+  idx <- idx+1
+}
+
+
+```
+
+
+```{r}
+for (sample in data_list_umaps[]){
+  print(SpatialDimPlot(sample, label = TRUE))
+}
+```
+
+```{r Genes_of_interest}
+for (sample in data_list_umaps[]){
+  print(SpatialFeaturePlot(sample, slot = "scale.data", features = c("IL34","CSF1","CDKN2A")))
+}
+```
+
+
+```{r plot_epi_marker_genes}
+for (sample in data_list_umaps[]){
+  print(SpatialFeaturePlot(sample, features = c("KRT13","CDKN2A","CD24","CDH1","PECAM1","CDH5","IL33", "KRT18", "IL34"), ncol = 5))
+}
+```
+
+```{r gene_heat_map}
+
+##### GENES FROM ENRICR and doi: 10.3389/fimmu.2022.966291
+
+feature_list <- c("EHF","CDKN2A","EPCAM", #Epithelial
+                  "PECAM1","ENG", #Endothelial Cells
+                  "MUC1", #Goblet Cells
+                  "KRT5","KRT15","KRT16", #Keratinocytes
+                  "CD14",#"CD86, NCF2", #Macrophage
+                  "FN1","VIM", "COL14A1", "TAGLN", #Fibroblast
+                  "MYLK","ACTG2", # Smooth Muscle
+                  "CD79A","CD79B", #B Cells
+                  "IL34","CSF1",#Genes of Interest
+                  "CDKN2B","TOX3","ANLN","BAG1","MUC16","KMT2C" # Cervical Cancer Genes
+                  )
+
+
+for (sample in data_ident_rename[]){
+  
+  df <- AverageExpression(sample, assays = "SCT",features = feature_list, layer = "count")
+  df <- as.matrix(df$SCT)
+
+  annot_row<- data.frame(Group  = factor(rep(c("Epithelial","Endothelial","Goblet Cells","Keratinocytes","Macrophages","Fibroblast","Smooth Muscle","B Cells","Genes of Interest","Cervical Cancer Genes"), c(3,2,1,3,1,4,2,2,2,6))))
+  rownames(annot_row) <- rownames(df)
+
+  gaps<- c(3,5,6,9,10,14,16,18,20)
+
+
+  print(pheatmap(df, cluster_cols = FALSE, cluster_rows = FALSE, scale = "row", annotation_row = annot_row, gaps_row = gaps))
+
+}
+
+
+
+```

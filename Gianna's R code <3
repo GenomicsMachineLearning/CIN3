@@ -1,0 +1,397 @@
+```{r packages, warning=FALSE}
+library(Matrix)
+library(Seurat)
+library(SeuratObject)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(pheatmap)
+library(uwot)
+```
+
+```{r load image}
+load("/Users/giannapavilion/mcna_workspace1.RData")
+
+# remove some big unneeded objects to free up memory
+rm(data_list_umaps)
+rm(data_list_qc)
+rm(merge)
+
+# make another slot
+for (sample in names(data_list)) {
+    data_list[[sample]]@assays$Spatial$data <- data_list[[sample]]@assays$Spatial$counts
+}
+```
+
+```{r integrated by Andrew}
+integrated_data <- readRDS("/Users/giannapavilion/Documents/integrated_data.RDS")
+
+# check it works
+DimPlot(integrated_data, label = T)
+SpatialDimPlot(integrated_data, label = T, ncol = 4, label.size = 2)
+```
+
+```{r general qc and calculations}
+
+for (sample in data_list){
+  mean_counts <- mean(sample@meta.data$nCount_Spatial)
+  median_counts <- median(sample@meta.data$nCount_Spatial)
+  print(paste(mean_counts, median_counts))
+  }
+
+for (sample in data_list){
+  mean_counts <- mean(sample@meta.data$nFeature_Spatial)
+  median_counts <- median(sample@meta.data$nFeature_Spatial)
+  print(paste(mean_counts, median_counts))
+  }
+
+################################################################
+
+qc_plots_counts <- function(seurat_obj){
+    plot1 <- SpatialFeaturePlot(seurat_obj, features = "nCount_Spatial")
+    plot3 <- VlnPlot(seurat_obj, features = "nCount_Spatial") + stat_summary(fun=mean, geom="point", shape=23, size=2, color = "blue")
+    plot1 + plot3
+}
+
+for (i in 1:8){
+  print(qc_plots_counts(data_ident_rename[[i]]))
+}
+
+# features:
+
+qc_plots_features <- function(seurat_obj){
+    plot2 <- SpatialFeaturePlot(seurat_obj, features = "nFeature_Spatial")
+    plot4 <- VlnPlot(seurat_obj, features = "nFeature_Spatial") + stat_summary(fun=mean, geom="point", shape=23, size=2, color = "blue")
+    plot2 + plot4
+}
+
+for (i in 1:8){
+  print(qc_plots_features(data_ident_rename[[i]]))
+}
+
+#integrated data
+
+VlnPlot(merge, c("nCount_Spatial", "nFeature_Spatial"), group.by = 'sample')
+
+```
+
+```{r too many genes list}
+
+paper_gene_list <- list(c("MUC5B", "WFDC2", "CDH5", "EMCN", "FLT1", "EGFL7", "MYH11", "MYLK", "ACTG2", "LAMA2", "COL3A1", "COL1A1", "FCGR3A", "ITGAX", "ITGAM", "MS4A7", "ENPP3", "KIT", "HLA-DRB1", "FCER1A", "IL7R", "FOXP3", "CTLA4", "TIGIT", "TOX2", "CD3E", "CD247", "NCAM1", "NCR1", "KLRC1", "GNLY", "PFN1", "GZMA", "GZMB", "POU2AF1", "MS4A1", "MZB1", "JCHAIN", "IGKC", "SERPINB3", "TP63", "KRT5", "CDKN2A", "IL34", "CSF1R"))
+
+t_cells_signature <- list(c("CD4", "FOXP3", "TGFb", "IL10","Th1", "IFNg", "Th2", "IL4", "IL5", "IL13", "TNFA"))
+
+t_regulatory <- list(c("CD4", "FOXP3", "TGFb", "IL10"))
+
+t_proinflammatory <- list(c("CD4","IFNg", "IL4", "IL5", "IL13"))
+
+t_anti_inflammatory <- list(c("CD4", "IL10"))
+
+macrophage_signature <- list(c("CD74", "CD86", "IL1b", "IL6", "TNFa", "INFy", "CCL2", "CCL9", "CCL10", "IL10", "TGFb", "IL4", "IL13", "CCL17", "CCL22"))
+
+m1_signature <- list(c("CD74", "CD86", "IL1b", "IL6", "TNFa", "INFy", "CCL2", "CCL9", "CCL10"))
+  
+m2_signature <- list(c("IL10", "TGFb", "IL4", "IL13", "CCL17", "CCL22"))
+
+apc_langerhan <- list(c("CD207", "CD1a", "IL34", "CSF1R"))
+
+apc_macrophage <- list(c("CD68", "CD14", "CD11b", "F4", "F80", "CD86", "CD74"))
+
+epithelial_genes_list <- list(c("MUC5B", "WFDC2"))
+
+subepithelial_genes_list <- list(c("CDH5", "EMCN", "FLT1", "EGFL7", "MYH11", "MYLK", "ACTG2", "LAMA2", "COL3A1", "COL1A1"))
+
+IL34_CSF1R_list <- list(c("IL34", "CSF1R"))
+
+cancer_genes_list <- list(c("SERPINB3", "TP63", "KRT5", "CDKN2A"))
+
+### remove major marker CD4 and CD74
+
+t_cells_signature2 <- list(c("FOXP3", "TGFb", "IL10","Th1", "IFNg", "Th2", "IL4", "IL5", "IL13", "TNFA"))
+
+t_regulatory2 <- list(c("FOXP3", "TGFb", "IL10"))
+
+t_proinflammatory2 <- list(c("IFNg", "IL4", "IL5", "IL13"))
+
+t_anti_inflammatory2 <- list(c("IL10"))
+
+macrophage_signature2 <- list(c("CD86", "IL1b", "IL6", "TNFa", "INFy", "CCL2", "CCL9", "CCL10", "IL10", "TGFb", "IL4", "IL13", "CCL17", "CCL22"))
+
+m1_signature2 <- list(c("CD86", "IL1b", "IL6", "TNFa", "INFy", "CCL2", "CCL9", "CCL10"))
+  
+m2_signature2 <- list(c("IL10", "TGFb", "IL4", "IL13", "CCL17", "CCL22"))
+
+apc_macrophage2 <- list(c("CD68", "CD14", "CD11b", "F4", "F80", "CD86"))
+
+apc_langerhan <- list(c("CD207", "CD1a", "IL34", "CSF1R")) # stayed the same, nothing removed
+```
+
+```{r even more module scores}
+gene_signatures <- list(
+  list(features = epithelial_genes_list, name = "Epithelial_MS"),
+  list(features = subepithelial_genes_list, name = "Subepi_MS"),
+  list(features = cancer_genes_list, name = "Cancer_MS"),
+  # immune cells
+  list(features = t_cells_signature, name = "TCells_MS"),
+  list(features = t_regulatory, name = "TReg_MS"),
+  list(features = t_proinflammatory, name = "TPro_MS"),
+  list(features = t_anti_inflammatory, name = "TAnti_MS"),
+  list(features = m1_signature, name = "M1_MS"),
+  list(features = m2_signature, name = "M2_MS"),
+  list(features = apc_langerhan, name = "Langherhans_MS"),
+  list(features = apc_macrophage, name = "APC_Mac_MS"),
+  # immune cells without major outliers
+  list(features = t_cells_signature2, name = "TCells_MS2"),
+  list(features = t_regulatory2, name = "TReg_MS2"),
+  list(features = t_proinflammatory2, name = "TPro_MS2"),
+  list(features = t_anti_inflammatory2, name = "TAnti_MS2"),
+  list(features = m1_signature2, name = "M1_MS2"),
+  list(features = m2_signature2, name = "M2_MS2"),
+  list(features = apc_macrophage2, name = "APC_Mac_MS2"),
+)
+for (signature in gene_signatures) {
+  for (i in 1:length(data_ident_rename)) {
+    if (i == 4) { # coz 86_D wants to be difficult
+      data_ident_rename[[i]] <- AddModuleScore(data_ident_rename[[i]], features = signature$features, name = signature$name, nbin = 23)
+    } else { # now back to ur regular scheduled programming
+      data_ident_rename[[i]] <- AddModuleScore(data_ident_rename[[i]], features = signature$features, name = signature$name)
+    }
+  }
+}
+```
+
+```{r map integrated clusters onto individual samples}
+
+cluster_assignments <- integrated_data@meta.data$seurat_clusters
+
+mapping_table <- data.frame(cell_barcode = rownames(integrated_data@meta.data),
+                            cluster_assignment = cluster_assignments)
+
+mapping_table$cell_barcode <- gsub("_1$", "", mapping_table$cell_barcode)
+
+for (i in 1:8){
+data_ident_rename[[i]]@meta.data$integrated_cluster <- 
+  mapping_table$cluster_assignment[match(rownames(data_ident_rename[[i]]@meta.data), mapping_table$cell_barcode)]
+}
+
+matched_indices <- match(rownames(data_ident_rename[[1]]@meta.data), mapping_table$cell_barcode)
+
+data_ident_rename[[1]]@meta.data$integrated_cluster <- mapping_table$cluster_assignment[na.exclude(matched_indices)]
+```
+
+```{r some column names weren't matching, this code fixes it}
+
+mapping_table$cell_barcode <- gsub("_\\d+$", "", mapping_table$cell_barcode)
+
+for (i in 1:8){
+matched_indices <- match(rownames(data_ident_rename[[i]]@meta.data), mapping_table$cell_barcode)
+
+data_ident_rename[[i]]@meta.data$integrated_cluster <- NA  
+
+data_ident_rename[[i]]@meta.data$integrated_cluster[!is.na(matched_indices)]     
+                <- mapping_table$cluster_assignment[matched_indices[!is.na(matched_indices)]]
+}
+
+```
+
+```{r tumour vs IL34*CSF1R}
+add_mod_score <- function(data, module_score_gene_list, assay, slot){
+    data <- AddModuleScore(data,features = module_score_gene_list, assay = assay, slot = slot, nbin = 12)
+    return(data)
+}
+
+#Gene lists
+gene_lists <- list("Tumour" = c("SERPINB3", "TP63",
+                                "KRT5", "CDKN2A"),
+                  "Markers" = c("IL34","CSF1R"))
+
+for (i in 1:8){
+    data_ident_rename[[i]] <- add_mod_score(data_ident_rename[[i]], gene_lists, "SCT", "data" )
+}
+
+ModuleScore_plots <- list()
+for (i in 1:8){
+    data_ident_rename[[i]]@meta.data$Tumour <- data_ident_rename[[i]]@meta.data$Cluster1
+    data_ident_rename[[i]]@meta.data$IL34_CSF1R <- data_ident_rename[[i]]@meta.data$Cluster2
+    plot <- SpatialFeaturePlot(data_ident_rename[[i]], features = c("Tumour","IL34_CSF1R"))
+    ModuleScore_plots[[i]] <- plot
+}
+
+CombinePlots(ModuleScore_plots, ncol = 4)
+#ggsave(CombinePlots(ModuleScore_plots, ncol = 4), filename = "plot1.pdf", height = 10, width = 30)
+
+groups = c("Cluster1","Cluster2")
+group_names = c("Tumour","IL34_CSF1R")
+```
+```{r}
+
+get_module_score_clusters <- function (data){
+    matches = list()
+    for(group in groups){
+        cluster_list <-  c()
+        for (idx in 1:nrow(data@meta.data)){
+            if (data@meta.data[[group]][idx] > 0.1){ 
+                other_cols <- setdiff(groups, group)
+                bool <- apply(data@meta.data[idx,][other_cols], 1, function(row) all(row < 0)) #if both greater than 0.1 
+                if (bool == TRUE){
+                
+                    cluster_list <-  c(cluster_list, group)
+                } else{
+                    cluster_list <-  c(cluster_list, FALSE)
+                }
+                          
+            } else {
+                cluster_list <-  c(cluster_list, FALSE)
+            }
+        }
+        matches[[group]] <- cluster_list                      
+    }
+    my_df <- data.frame(do.call(cbind, matches))
+    
+    finalised_column <- c()
+    for (idx in 1:nrow(my_df)){
+        result <- my_df[idx,][my_df[idx,] != "FALSE"]
+        if (length(result) >0){
+            finalised_column <- c(finalised_column, result)
+        } else{
+            finalised_column <- c(finalised_column,"None")
+        }
+    }
+
+    data@meta.data$summarised <- finalised_column                       
+    
+    new_col <- c()
+    for (row in data@meta.data$summarised){
+        if (row  != "None"){
+            int <- as.numeric(strsplit(row,split = "Cluster")[[1]][2])
+
+            val <- group_names[int]
+
+        } else{
+            val <- "None"
+            }
+        new_col <- c(new_col, val)
+        }
+                       
+    data@meta.data$finalised <- new_col
+                              
+    return(data)
+}
+```
+################################################################
+
+```{r now the fun bit}
+
+# individual dot plots with integrated clusters
+for (i in 1:8) {
+DotPlot(data_ident_rename[[i]], features = paper_gene_list[[1]], 
+        group.by = "integrated_cluster", dot.scale = 6, col.min = 0) 
+        + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+        }
+
+# integrated plot with all marker module scores
+DotPlot(integrated_data, features = c("Epithelial_MS", "Cancer_MS", 
+        "TCells_MS", "TReg_MS","TPro_MS","TAnti_MS", "Macro", "Macro1_MS", 
+        "Macro2_MS", "Langherhans_MS", "APC_Macro_MS"), group.by = "seurat_clusters", 
+        dot.scale = 8, col.min = 0) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+```{r cell_cycle_integrated, warning=FALSE}
+
+cell_cycle.outputdir <- paste0("/Users/giannapavilion/", "/Cell_Cycle")
+dir.create(cell_cycle.outputdir)
+func_predictCellCycle <- function(seuratObj, myspecies="human", outdir,sampleID){
+  # USAGE: seuratObj <- func_predictCellCycle(seuratObj, “mouse”)
+  # OUTPUT: a Seurat object with S/G2M-phase scores and cell stage (G1, S, G2M) calls
+  # specify the gene set used for Cell Cycle Scoring (human or mouse)
+  if (identical(myspecies, "mouse")) {
+    load("/Users/uqlgrice/Documents/IMB/Research/LabBooks/20200106_BuildPipe/data/mouse.cc.genes.Rdata")
+    geneset <- mouse.cc.genes
+  } else if (identical(myspecies, "human")) {
+    geneset <- cc.genes.updated.2019
+  } else {
+    stop("The 'species' argument must be mouse or human")
+  }
+  # make a Seurat object, normalise, run prediction
+  # note: we use Seurat’s default normalisation tool for the cell phase assessment (quick and dirty). Later we will use Scran for the normal normalisation
+  seuratObj <- CellCycleScoring(seuratObj,
+                                s.features = geneset$s.genes,
+                                g2m.features = geneset$g2m.genes,
+                                set.ident = TRUE)
+  # define some graph functions which will be run with to.pdf
+  fig.cellcycle.bar <- function() {
+    pdf(paste0(outdir,"/",sampleID, "_CellCycle_bar.pdf"))
+    myscale <- round(max(table(seuratObj$Phase)), -3) #scale
+    mybar <- barplot(table(seuratObj$Phase),
+                     ylim = (c(0, myscale)),
+                     main = paste0("Cell Phases in ", sampleID),
+                     xlab = "cell phase",
+                     ylab = "# cells",
+                     col = "white")
+    text(mybar,
+         table(seuratObj$Phase)+100,
+         paste("n: ", table(seuratObj$Phase), sep=""), cex = 1)
+    dev.off()
+  }
+  fig.cellcycle.pie <- function() {
+    pdf(paste0(outdir, "/",sampleID, "_CellCycle_pie.pdf"))
+    pie(table(seuratObj$Phase),
+        labels = table(seuratObj$Phase),
+        col = c("bisque", "cornflowerblue", "cadetblue2"),
+        main = paste0("Cell phases in ", sampleID))
+    legend("topright", c("G1", "G2M", "S"), cex = 0.8, fill = c("bisque", "cornflowerblue", "cadetblue2"))
+    dev.off()
+  }
+  # spatial plots
+  fig.cellcycle.spatial <- function() {
+    SpatialDimPlot(seuratObj, group.by = "Phase", pt.size.factor = 1.4) +
+      theme(legend.position = "right")
+    ggsave(paste0(outdir, "/",sampleID, "_CellCycle_spatial.pdf"))
+  }
+  fig.cellcycle.bar()
+  fig.cellcycle.pie()
+  fig.cellcycle.spatial()
+  # return the updated SCE
+  return(seuratObj)
+}
+integrated_data <- func_predictCellCycle(integrated_data, "human", cell_cycle.outputdir, "integrated")
+#add cell_cycle values back to original object to compare with clustering and DE
+cell_cycle_labels <- as.data.frame(integrated_data[[c("Barcode","sample", "Phase")]])
+i <- 1
+len <- dim(data_ident_rename[[1]][[]])[1]
+cell_cycle_coords <- c()
+while (i <= len) {
+  spot <- data_ident_rename[[1]][[]][i,]
+  if (spot[4] %in% cell_cycle_labels$Barcode) {
+    label <- cell_cycle_labels[paste0(spot[4]),][3]
+  } else {
+    label <- "unassigned"
+  }
+  cell_cycle_coords <- c(cell_cycle_coords, paste0(label))
+  i <- i+1
+}
+data_ident_rename[[1]] <- AddMetaData(data_ident_rename[[1]],cell_cycle_coords,col.name = "Cell_Phase")
+#displays cell phase on spatial plot
+SpatialDimPlot(data_ident_rename[[1]], group.by = "Cell_Phase", cols = phase_palate)
+DimPlot(integrated.cluster, reduction = "umap", group.by = "Phase", cols = phase_palate)
+
+
+for (i in 1:8){
+test_cycle <- CellCycleScoring(data_ident_rename[[i]], s.features = geneset$s.genes, g2m.features = geneset$g2m.genes, set.ident = TRUE)
+
+SpatialDimPlot(test_cycle, group.by = "Phase")}
+```
+
+```{r}
+# Fixed code with replacement allowed
+test_cycle <- CellCycleScoring(data_ident_rename[[1]], s.features = geneset$s.genes, g2m.features = geneset$g2m.genes, set.ident = TRUE)
+
+SpatialDimPlot(test_cycle, group.by = "Phase")
+
+df <- as.data.frame(unique(integrated_data@meta.data$Phase))
+
+```
+
+
+
